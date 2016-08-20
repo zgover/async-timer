@@ -88,10 +88,7 @@ public class MainActivity extends AppCompatActivity {
 		this.totalTime = TimeUnit.MINUTES.toMillis(min) + TimeUnit.SECONDS.toMillis(sec);
 
 		// Start the timer
-		preTime = System.currentTimeMillis();
-		timeElapsed = new Long(0);
 		running = true;
-
 		AsyncThread task = new AsyncThread();
 		task.execute(totalTime);
 	}
@@ -150,7 +147,7 @@ public class MainActivity extends AppCompatActivity {
 	 * MARK: Nested Classes
 	 */
 
-	private class AsyncThread extends AsyncTask<Long, Long, String> {
+	private class AsyncThread extends AsyncTask<Long, Long, Long> {
 
 		@Override
 		protected void onPreExecute() {
@@ -161,11 +158,16 @@ public class MainActivity extends AppCompatActivity {
 		}
 
 		@Override
-		protected String doInBackground(Long... time) {
+		protected Long doInBackground(Long... time) {
+			Long preTime = System.currentTimeMillis();
 			Long totalTime = time[0];
-			String returnType;
+			Long timeElapsed = new Long(0);
 
 			do {
+				if (!running) {
+					this.cancel(true);
+				}
+
 				// Sleep for 500 milliseconds
 				try { Thread.sleep(500); } catch (Exception e) { e.printStackTrace(); }
 
@@ -177,26 +179,21 @@ public class MainActivity extends AppCompatActivity {
 
 				// Determine the result or if we cancelled the timer
 				if (!running) {
-					break;
+					this.cancel(true);
+					return timeElapsed;
 				} else if (timeElapsed >= totalTime) {
 					running = false;
-					System.out.println("yes it did still run");
+					return timeElapsed;
 				} else {
-					System.out.println("is running: " + running);
 					// Update timer
 					publishProgress(totalTime - timeElapsed);
 					preTime = postTime;
 				}
 
-			} while(running);
+			} while(timeElapsed < totalTime);
 
-			if (running) {
-				returnType = "timer-expired";
-			} else {
-				returnType = "timer-cancelled";
-			}
-
-			return returnType;
+			running = false;
+			return timeElapsed;
 		}
 
 		@Override
@@ -208,17 +205,23 @@ public class MainActivity extends AppCompatActivity {
 		}
 
 		@Override
-		protected void onPostExecute(String type) {
-			super.onPostExecute(type);
+		protected void onCancelled(Long s) {
+			super.onCancelled(s);
 
-			HashMap<String, String> time = milToReal(timeElapsed);
+			// Cancelled
+			HashMap<String, String> time = milToReal(s);
 			String showTime  = "Min: " + time.get("min") + " Sec: " + time.get("sec");
+			showAlert("Timer Cancelled", "Total Time: " + showTime);
+		}
 
-			if (type.equals("timer-expired")) {
-				showAlert("Timer Expired", "Total Time: " + showTime);
-			} else if (type.equals("timer-cancelled")) {
-				showAlert("Timer Cancelled", "Total Time: " + showTime);
-			}
+		@Override
+		protected void onPostExecute(Long s) {
+			super.onPostExecute(s);
+
+			// Expired
+			HashMap<String, String> time = milToReal(s);
+			String showTime  = "Min: " + time.get("min") + " Sec: " + time.get("sec");
+			showAlert("Timer Expired", "Total Time: " + showTime);
 		}
 	}
 }
