@@ -22,7 +22,7 @@
 			android:layout_weight="0.45"
 			android:layout_width="0dp"
 			android:layout_height="wrap_content"
-			android:text="01"
+			android:text="00"
 			android:maxLength="2"
 			android:inputType="number"
 			android:textAlignment="viewEnd"

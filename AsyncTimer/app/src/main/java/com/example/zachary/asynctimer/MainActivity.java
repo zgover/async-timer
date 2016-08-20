@@ -5,16 +5,16 @@
 package com.example.zachary.asynctimer;
 
 import android.os.AsyncTask;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.HashMap;
-import java.util.TimerTask;
-import java.util.Timer;
 import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
@@ -27,7 +27,6 @@ public class MainActivity extends AppCompatActivity {
 	public int sec;
 	public Long totalTime;
 	public Long timeElapsed;
-	public Timer timer;
 	public Long preTime;
 	public boolean running;
 
@@ -63,109 +62,163 @@ public class MainActivity extends AppCompatActivity {
 	public void stopTimer(View view) {
 		// Stop the timer
 		if (running) {
-			timer.cancel();
-			preTime = null;
-			timer = null;
 			running = false;
+
+			// Reset fields
+			minField.setText("00");
+			secField.setText("00");
 		}
 	}
 
 	public void startTimer(View view) {
-		if (running) { return; }
+		if (running) {
+			showToast("Timer is already running");
+			return;
+		}
+		// All empty or zeros
+		else if ((minField.equals("") || minField.equals("00") || minField.equals("0"))
+			&& (secField.equals("0") || secField.equals("00") || secField.equals(""))) {
+			showToast("Please enter a valid time");
+			return;
+		}
 
 		// Set the min / sec
 		this.min = Integer.parseInt(minField.getText().toString());
 		this.sec = Integer.parseInt(secField.getText().toString());
-		this.totalTime = new Long(
-			(TimeUnit.MINUTES.toMillis(min) + TimeUnit.SECONDS.toMillis(sec))
-		);
+		this.totalTime = TimeUnit.MINUTES.toMillis(min) + TimeUnit.SECONDS.toMillis(sec);
 
 		// Start the timer
 		preTime = System.currentTimeMillis();
 		timeElapsed = new Long(0);
-		timer = new Timer();
 		running = true;
 
-		timer.schedule(new TimeTask(), 0, 500);
+		AsyncThread task = new AsyncThread();
+		task.execute(totalTime);
 	}
 
 	/**
 	 * MARK: Custom Methods
 	 */
 
-	public void updateTimer(String min, String sec) {
+	public void updateTimer(Long time) {
+		HashMap<String, String> parsedTime = milToReal(time);
+
 		// Set text for min and sec text fields
-		this.minField.setText(min);
-		this.secField.setText(sec);
+		this.minField.setText(parsedTime.get("min"));
+		this.secField.setText(parsedTime.get("sec"));
+	}
+
+	public void showToast(String message) {
+		Toast toast = Toast.makeText(
+			getApplicationContext(), message, Toast.LENGTH_SHORT
+		);
+		toast.show();
+	}
+
+	public void showAlert(String title, String message) {
+		AlertDialog.Builder adb = new AlertDialog.Builder(this);
+		adb.setTitle(title);
+		adb.setMessage(message);
+		adb.setPositiveButton("Continue", null);
+		adb.show();
+	}
+
+	public HashMap<String, String> milToReal(Long time) {
+		HashMap<String, String> returnTime = new HashMap<>();
+		String min;
+		String sec;
+
+		// Set the values from the time elapsed
+		min = String.format(
+			"%02d", TimeUnit.MILLISECONDS.toMinutes(time)
+		);
+
+		sec = String.format(
+			"%02d", TimeUnit.MILLISECONDS.toSeconds(time) -
+				TimeUnit.MINUTES.toSeconds(
+					TimeUnit.MILLISECONDS.toMinutes(time)
+				)
+		);
+
+		returnTime.put("min", min);
+		returnTime.put("sec", sec);
+
+		return returnTime;
 	}
 
 	/**
 	 * MARK: Nested Classes
 	 */
 
-	private class AsyncThread extends AsyncTask<String, String, HashMap<String, String>> {
+	private class AsyncThread extends AsyncTask<Long, Long, String> {
 
 		@Override
-		protected HashMap<String, String> doInBackground(String... strings) {
+		protected void onPreExecute() {
+			super.onPreExecute();
 
-			HashMap<String, String> returnTime;
-			Long postTime = System.currentTimeMillis();
-			Long difference = postTime - preTime;
-			String min;
-			String sec;
+			// Show toast for initial run
+			showToast("Timer has been started");
+		}
 
-			System.out.println(preTime);
-			System.out.println(postTime);
-			System.out.println(timeElapsed);
-			System.out.println(difference);
-			System.out.println(timeElapsed + difference);
-			System.out.println(totalTime);
+		@Override
+		protected String doInBackground(Long... time) {
+			Long totalTime = time[0];
+			String returnType;
 
-			timeElapsed += difference;
+			do {
+				// Sleep for 500 milliseconds
+				try { Thread.sleep(500); } catch (Exception e) { e.printStackTrace(); }
 
-			// Determine the time difference
-			if (timeElapsed >= totalTime) {
-				min = "00";
-				sec = "00";
+				// Grab the time after sleep and compare.
+				Long postTime = System.currentTimeMillis();
+				Long difference = postTime - preTime;
 
-				timer.cancel();
+				timeElapsed += difference;
+
+				// Determine the result or if we cancelled the timer
+				if (!running) {
+					break;
+				} else if (timeElapsed >= totalTime) {
+					running = false;
+					System.out.println("yes it did still run");
+				} else {
+					System.out.println("is running: " + running);
+					// Update timer
+					publishProgress(totalTime - timeElapsed);
+					preTime = postTime;
+				}
+
+			} while(running);
+
+			if (running) {
+				returnType = "timer-expired";
 			} else {
-				// Set the values from the time elapsed
-				min = String.format(
-					"%02d", TimeUnit.MILLISECONDS.toMinutes(totalTime - timeElapsed)
-				);
-
-				sec = String.format(
-					"%02d", TimeUnit.MILLISECONDS.toSeconds(totalTime - timeElapsed) -
-						TimeUnit.MINUTES.toSeconds(
-							TimeUnit.MILLISECONDS.toMinutes(totalTime - timeElapsed)
-						)
-				);
+				returnType = "timer-cancelled";
 			}
 
-			// Build the return time and return it
-			returnTime = new HashMap<>();
-			returnTime.put("min", min);
-			returnTime.put("sec", sec);
-
-			preTime = System.currentTimeMillis();
-
-			return returnTime;
+			return returnType;
 		}
 
 		@Override
-		protected void onPostExecute(HashMap<String, String> s) {
-			super.onPostExecute(s);
-			updateTimer(s.get("min"), s.get("sec"));
-		}
-	}
+		protected void onProgressUpdate(Long... time) {
+			super.onProgressUpdate(time);
 
-	private class TimeTask extends TimerTask {
+			// Update timer on main thread
+			updateTimer(time[0]);
+		}
 
 		@Override
-		public void run() {
-			AsyncThread task = new AsyncThread();
-			task.execute();
+		protected void onPostExecute(String type) {
+			super.onPostExecute(type);
+
+			HashMap<String, String> time = milToReal(timeElapsed);
+			String showTime  = "Min: " + time.get("min") + " Sec: " + time.get("sec");
+
+			if (type.equals("timer-expired")) {
+				showAlert("Timer Expired", "Total Time: " + showTime);
+			} else if (type.equals("timer-cancelled")) {
+				showAlert("Timer Cancelled", "Total Time: " + showTime);
+			}
 		}
 	}
 }
